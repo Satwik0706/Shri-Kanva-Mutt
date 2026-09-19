@@ -466,7 +466,7 @@ fun MainScreen() {
                 NavHost(
                     navController = navController,
                     startDestination = Screen.Splash.route,
-                    modifier = Modifier.padding(if (isSplash) PaddingValues(0.dp) else innerPadding),
+                    modifier = Modifier, // Removed double padding
                     enterTransition = { fadeIn(animationSpec = tween(400)) + slideInHorizontally(initialOffsetX = { 300 }, animationSpec = tween(400)) },
                     exitTransition = { fadeOut(animationSpec = tween(400)) + slideOutHorizontally(targetOffsetX = { -300 }, animationSpec = tween(400)) },
                     popEnterTransition = { fadeIn(animationSpec = tween(400)) + slideInHorizontally(initialOffsetX = { -300 }, animationSpec = tween(400)) },

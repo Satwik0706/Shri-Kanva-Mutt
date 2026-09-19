@@ -3,6 +3,7 @@ package com.satwik.example.mutt_app.ui.components
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -47,6 +48,7 @@ fun ShimmerAsyncImage(
         AsyncImage(
             model = request,
             contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize(),
             contentScale = contentScale,
             alignment = alignment,
             onState = { state ->
