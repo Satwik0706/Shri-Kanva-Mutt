@@ -124,25 +124,25 @@ fun HomeScreen(navController: NavController) {
 fun HeroBanner(config: HomeConfig) {
     Box(modifier = Modifier
         .fillMaxWidth()
-        .height(260.dp)
+        .wrapContentHeight()
         .background(Brush.verticalGradient(listOf(Terracotta, RichBrown)))
     ) {
         if (config.bannerImageUrl.isNotEmpty()) {
             ShimmerAsyncImage(
                 model = config.bannerImageUrl, 
                 contentDescription = "Banner", 
-                modifier = Modifier.fillMaxSize(), 
-                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().wrapContentHeight(), 
+                contentScale = ContentScale.FillWidth,
                 alignment = Alignment.Center
             )
         }
-        Box(modifier = Modifier.fillMaxSize().background(
+        Box(modifier = Modifier.matchParentSize().background(
             Brush.verticalGradient(
                 colors = listOf(Color.Transparent, DeepBlack.copy(alpha = 0.85f)),
                 startY = 300f
             )
         ))
-        Column(modifier = Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.Bottom) {
+        Column(modifier = Modifier.matchParentSize().padding(20.dp), verticalArrangement = Arrangement.Bottom) {
             Surface(color = GoldAccent, shape = RoundedCornerShape(4.dp), modifier = Modifier.padding(bottom = 6.dp)) {
                 Text("OFFICIAL APP", color = RichBrown, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
             }

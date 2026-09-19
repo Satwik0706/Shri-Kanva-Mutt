@@ -1001,8 +1001,8 @@ fun PanchangManager(onFinished: () -> Unit) {
                                         if (shouldPushNotify) {
                                             val dateStr = java.text.SimpleDateFormat("dd MMM").format(java.util.Date(date))
                                             MuttRepository.pushNotification(AppNotification(
-                                                title = "Panchanga Updated",
-                                                message = "New details for $dateStr are now available.",
+                                                title = "Todays Panchanga",
+                                                message = "Todays Panchanga details are now available ($dateStr).",
                                                 type = "Panchanga"
                                             ))
                                         }
