@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "165638239398",
+    "project_id": "shri-kanva-mutt",
+    "storage_bucket": "shri-kanva-mutt.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:165638239398:android:130bfb09f9fcc164377067",
+        "android_client_info": {
+          "package_name": "com.satwik.example.mutt_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEhzbSgHktX_HkTyPPWpY1MFOwmEvhrGw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:165638239398:android:f0bbbc8d84a5e868377067",
+        "android_client_info": {
+          "package_name": "com.satwik.example.mutt_app.admin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEhzbSgHktX_HkTyPPWpY1MFOwmEvhrGw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

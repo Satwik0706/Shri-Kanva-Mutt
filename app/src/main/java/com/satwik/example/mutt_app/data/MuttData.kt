@@ -1,12 +1,21 @@
 package com.satwik.example.mutt_app.data
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import java.util.Date
+import android.util.Log
+import android.net.Uri
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import com.satwik.example.mutt_app.BuildConfig
 
 data class Announcement(
-    val id: Int, 
-    var content: String, 
+    var id: String = "", 
+    var content: String = "", 
     var title: String = "",
     var imageUrl: String = "",
     var language: String = "English",
@@ -14,177 +23,781 @@ data class Announcement(
 )
 
 data class Event(
-    val id: Int, 
-    var title: String, 
-    var description: String, 
+    var id: String = "", 
+    var title: String = "", 
+    var description: String = "", 
     var imageUrl: String = "",
-    var date: Long, 
-    var expiryDate: Long,
+    var startDate: Long = 0, 
+    var endDate: Long = 0,
+    var expiryDate: Long = 0, // For backward compatibility, will match endDate
     var location: String = "",
-    var registrationStatus: String = "Open" // Open, Registered, Pending
+    var registrationStatus: String = "Open",
+    var registrationUrl: String = "",
+    var galleryImageUrls: List<String> = emptyList()
 )
 
-data class Photo(
-    val id: Int,
-    var url: String,
-    var caption: String,
-    var category: String = "General"
-)
-
-data class Panchang(
-    val id: Int,
-    var date: String,
-    var tithi: String,
-    var nakshatra: String,
-    var yoga: String,
-    var karana: String
-)
-
-data class Shloka(
-    val id: Int,
-    var content: String,
-    var deityImageUrl: String = "",
-    var title: String = ""
-)
-
-data class AppFeature(
-    val id: Int,
-    var name: String,
-    var description: String,
-    var isEnabled: Boolean = true
+data class SevaFormField(
+    var label: String = "",
+    var type: String = "Text", // Text, Dropdown, Number
+    var options: String = "", // Comma separated for dropdown
+    var isRequired: Boolean = true
 )
 
 data class Seva(
-    val id: Int,
-    var name: String,
+    var id: String = "",
+    var title: String = "",
+    var tag: String = "SANKALPA",
     var description: String = "",
-    var amount: Int,
-    var imageUrl: String = ""
+    var amount: Int = 0,
+    var imageUrl: String = "",
+    var paymentQrUrl: String = "",
+    var upiId: String = "",
+    var isFeatured: Boolean = false,
+    var formFields: List<SevaFormField> = emptyList()
+)
+
+data class Shloka(
+    var id: String = "",
+    var content: String = "",
+    var deityImageUrl: String = "",
+    var title: String = "",
+    var pdfUrl: String = "",
+    var timestamp: Long = System.currentTimeMillis()
 )
 
 data class Branch(
-    val id: Int,
-    var name: String,
-    var address: String,
-    var contact: String,
+    var id: String = "",
+    var name: String = "",
+    var address: String = "",
+    var contact: String = "",
     var email: String = "",
     var mapUrl: String = ""
 )
 
-data class Guru(
-    val id: Int,
-    var name: String,
-    var period: String,
-    var description: String,
-    var photoUrl: String = ""
-)
-
 data class SocialLink(
-    val id: Int,
-    val platform: String,
-    val handle: String,
-    val audience: String,
-    val url: String
+    var id: String = "",
+    var platform: String = "",
+    var handle: String = "",
+    var audience: String = "",
+    var url: String = "",
+    var imageUrl: String = ""
 )
 
-data class Donation(
-    val id: Int,
-    val donorName: String,
-    val amount: Int,
-    val date: Long,
-    val receiptId: String
+data class Panchang(
+    var id: String = "",
+    var date: Long = 0,
+    var samvatsara: String = "",
+    var ayana: String = "",
+    var ritu: String = "",
+    var masa: String = "",
+    var paksha: String = "",
+    var tithi: String = "",
+    var tithiStart: String = "",
+    var tithiEnd: String = "",
+    var nextTithi: String = "",
+    var nakshatra: String = "",
+    var nakshatraStart: String = "",
+    var nakshatraEnd: String = "",
+    var nextNakshatra: String = "",
+    var yoga: String = "",
+    var karana: String = "",
+    var souraMasa: String = "",
+    var rahuKala: String = "",
+    var yamagandaKala: String = "",
+    var suryodaya: String = "",
+    var suryasta: String = "",
+    var specialNote: String = "",
+    var isSpecial: Boolean = false
 )
 
-data class Notification(
-    val id: Int,
-    val title: String,
-    val message: String,
-    val date: Long
+data class Registration(
+    var id: String = "",
+    var userId: String = "guest_user",
+    var phoneNumber: String = "",
+    var itemId: String = "", // Event or Seva ID
+    var itemTitle: String = "",
+    var status: String = "Pending", // Pending, Verified, Completed
+    var timestamp: Long = System.currentTimeMillis(),
+    var formResponses: Map<String, String> = emptyMap(),
+    var utrNumber: String = "",
+    var paymentScreenshotUrl: String = "",
+    var paidAmount: String = "0" // Added for record keeping
+)
+
+data class SevaRecord(
+    var id: String = "",
+    var devoteeName: String = "",
+    var sevaName: String = "",
+    var amountPaid: String = "0",
+    var utr: String = "",
+    var timestamp: Long = System.currentTimeMillis(),
+    var type: String = "Seva" // "Seva", "Member", "Volunteer"
+)
+
+data class Publication(
+    var id: String = "",
+    var type: String = "Book", // Book, Magazine, Audio, etc.
+    var name: String = "",
+    var description: String = "",
+    var cost: String = "0",
+    var imageUrl: String = ""
+)
+
+data class ContactConfig(
+    var email: String = "",
+    var phone: String = "",
+    var address: String = "",
+    var mapUrl: String = "",
+    var volunteerFormUrl: String = "",
+    var membershipFormUrl: String = "",
+    var feedbackFormUrl: String = "",
+    var facebookUrl: String = "",
+    var instagramUrl: String = "",
+    var youtubeUrl: String = "",
+    var privacyPolicyUrl: String = ""
+)
+
+data class News(
+    var id: String = "",
+    var headline: String = "",
+    var description: String = "",
+    var link: String = "",
+    var timestamp: Long = System.currentTimeMillis()
+)
+
+data class PhotoAlbum(
+    var id: String = "",
+    var title: String = "",
+    var category: String = "General", // Festival, Pravachana, Daily Darshan
+    var imageUrls: List<String> = emptyList(),
+    var timestamp: Long = System.currentTimeMillis()
+)
+
+data class VideoItem(
+    var id: String = "",
+    var title: String = "",
+    var url: String = "", // YouTube or direct link
+    var category: String = "General",
+    var timestamp: Long = System.currentTimeMillis()
+)
+
+data class Festival(
+    var id: String = "",
+    var name: String = "",
+    var dateTime: String = "",
+    var description: String = "",
+    var link: String = "",
+    var timestamp: Long = System.currentTimeMillis()
+)
+
+data class SpecialEvent(
+    var id: String = "",
+    var title: String = "",
+    var content: String = "",
+    var imageUrl: String = "",
+    var videoUrl: String = "",
+    var isHighlighted: Boolean = false,
+    var timestamp: Long = System.currentTimeMillis()
 )
 
 data class HomeConfig(
-    val bannerTitle: String = "Welcome to Sri Kanva Matha",
-    val bannerSubtitle: String = "Digital Home of Sri Kanva Matha",
-    val bannerImageUrl: String = "",
-    val dailyWisdom: String = "\"Satyam Eva Jayate\" - Truth Alone Triumphs."
+    var bannerTitle: String = "Welcome to Sri Kanva Matha",
+    var bannerSubtitle: String = "Digital Home of Sri Kanva Matha",
+    var bannerImageUrl: String = "",
+    var dailyWisdom: String = "\"Satyam Eva Jayate\" - Truth Alone Triumphs.",
+    var liveDarshanUrl: String = "",
+    var appLogoUrl: String = "",
+    var splashLogoUrl: String = "",
+    var panchangaSourceUrl: String = "https://kanvamath.org/daypanchang.php",
+    var whatsappSharePrefix: String = "*Daily Panchanga - Sri Kanva Matha*\\n\\n"
+)
+
+data class AboutConfig(
+    var title: String = "About Sri Kanva Matha",
+    var content: String = "History and Vision content...",
+    var imageUrl: String = ""
+)
+
+data class Guru(
+    var id: String = "",
+    var name: String = "",
+    var title: String = "",
+    var lifespan: String = "",
+    var shortDescription: String = "",
+    var biography: String = "",
+    var timeline: String = "", // Aradhana dates, etc.
+    var imageUrl: String = "",
+    var order: Int = 0, // For sorting
+    var videoUrl: String = "",
+    var pdfUrl: String = ""
+)
+
+data class PeethadhipatiConfig(
+    var name: String = "",
+    var title: String = "",
+    var imageUrl: String = "",
+    var vision: String = "",
+    var videoUrl: String = ""
+)
+
+data class ProgramConfig(
+    var id: String = "",
+    var title: String = "",
+    var description: String = "",
+    var imageUrl: String = "",
+    var mode: String = "External", // "External" or "Internal"
+    var externalUrl: String = "",
+    var formFields: List<SevaFormField> = emptyList()
+)
+
+data class AppNotification(
+    var id: String = "",
+    var title: String = "",
+    var message: String = "",
+    var timestamp: Long = System.currentTimeMillis(),
+    var type: String = "General" // "General", "Panchanga", "Event"
 )
 
 object MuttRepository {
+    private const val TAG = "MuttRepository"
+    val db = FirebaseFirestore.getInstance()
+    private val storage = FirebaseStorage.getInstance()
+    private val auth = FirebaseAuth.getInstance()
+
+    private val _isLanguageKannada = MutableStateFlow(false)
+    val isLanguageKannada: StateFlow<Boolean> = _isLanguageKannada
+
+    fun setLanguage(isKannada: Boolean) {
+        _isLanguageKannada.value = isKannada
+    }
+
+    private val collectionStatuses = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    val connectionStatus: StateFlow<String> = collectionStatuses.map { statuses ->
+        val issues = statuses.filterValues { it != "Connected" }
+        if (issues.isEmpty()) "Connected"
+        else issues.entries.first().value // Show the first issue found
+    }.stateIn(scope = CoroutineScope(Dispatchers.Main + SupervisorJob()), started = SharingStarted.Eagerly, initialValue = "Initializing...")
+
+    private val _currentUser = MutableStateFlow(auth.currentUser)
+    val currentUser: StateFlow<com.google.firebase.auth.FirebaseUser?> = _currentUser
+
+    suspend fun signIn(email: String, pass: String) = try {
+        auth.signInWithEmailAndPassword(email, pass).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    fun signOut() { auth.signOut() }
+
+    // ... (rest of the fields)
+
+    suspend fun uploadFile(uri: Uri, folder: String, extension: String = "jpg"): Result<String> = try {
+        val fileName = "${System.currentTimeMillis()}.$extension"
+        val ref = storage.reference.child("$folder/$fileName")
+        ref.putFile(uri).await()
+        val downloadUrl = ref.downloadUrl.await()
+        Result.success(downloadUrl.toString())
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun uploadImage(uri: Uri, folder: String): Result<String> = uploadFile(uri, folder, "jpg")
+
+    suspend fun uploadCompressedImage(context: android.content.Context, uri: Uri, folder: String): Result<String> = try {
+        val inputStream = context.contentResolver.openInputStream(uri)
+        val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+        
+        // 1. Calculate scaling to keep image under 1920px while maintaining aspect ratio
+        val maxDimension = 1920
+        val width = originalBitmap.width
+        val height = originalBitmap.height
+        val scale = if (width > maxDimension || height > maxDimension) {
+            val scaleW = maxDimension.toFloat() / width
+            val scaleH = maxDimension.toFloat() / height
+            kotlin.math.min(scaleW, scaleH)
+        } else 1.0f
+        
+        val bitmap = if (scale < 1.0f) {
+            android.graphics.Bitmap.createScaledBitmap(
+                originalBitmap, 
+                (width * scale).toInt(), 
+                (height * scale).toInt(), 
+                true
+            )
+        } else originalBitmap
+
+        val baos = java.io.ByteArrayOutputStream()
+        
+        // 2. Use WebP for superior compression (API 30+) with fallback for older versions
+        val format = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
+        } else {
+            @Suppress("DEPRECATION")
+            android.graphics.Bitmap.CompressFormat.WEBP
+        }
+        
+        bitmap.compress(format, 75, baos)
+        val data = baos.toByteArray()
+        
+        val fileName = "${System.currentTimeMillis()}.webp"
+        val ref = storage.reference.child("$folder/$fileName")
+        ref.putBytes(data).await()
+        val downloadUrl = ref.downloadUrl.await()
+        
+        if (originalBitmap != bitmap) originalBitmap.recycle()
+        bitmap.recycle()
+        
+        Result.success(downloadUrl.toString())
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteImage(url: String): Result<Unit> = try {
+        if (url.startsWith("https://firebasestorage.googleapis.com")) {
+            val ref = storage.getReferenceFromUrl(url)
+            ref.delete().await()
+        }
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
     private val _homeConfig = MutableStateFlow(HomeConfig())
     val homeConfig: StateFlow<HomeConfig> = _homeConfig
 
-    private val _announcements = MutableStateFlow<List<Announcement>>(emptyList())
-    val announcements: StateFlow<List<Announcement>> = _announcements
+    private val _aboutConfig = MutableStateFlow(AboutConfig())
+    val aboutConfig: StateFlow<AboutConfig> = _aboutConfig
 
-    private val _events = MutableStateFlow<List<Event>>(emptyList())
-    val events: StateFlow<List<Event>> = _events
+    private val _peethadhipatiConfig = MutableStateFlow(PeethadhipatiConfig())
+    val peethadhipatiConfig: StateFlow<PeethadhipatiConfig> = _peethadhipatiConfig
 
-    private val _photos = MutableStateFlow<List<Photo>>(emptyList())
-    val photos: StateFlow<List<Photo>> = _photos
+    private val _contactConfig = MutableStateFlow(ContactConfig())
+    val contactConfig: StateFlow<ContactConfig> = _contactConfig
 
-    private val _panchang = MutableStateFlow<List<Panchang>>(emptyList())
-    val panchang: StateFlow<List<Panchang>> = _panchang
+    private val _volunteerPrograms = MutableStateFlow<List<ProgramConfig>>(emptyList())
+    val volunteerPrograms: StateFlow<List<ProgramConfig>> = _volunteerPrograms
 
-    private val _shlokas = MutableStateFlow<List<Shloka>>(emptyList())
-    val shlokas: StateFlow<List<Shloka>> = _shlokas
+    private val _membershipConfig = MutableStateFlow(ProgramConfig(title = "Membership Program"))
+    val membershipConfig: StateFlow<ProgramConfig> = _membershipConfig
 
-    private val _features = MutableStateFlow<List<AppFeature>>(emptyList())
-    val features: StateFlow<List<AppFeature>> = _features
-
-    private val _sevas = MutableStateFlow<List<Seva>>(emptyList())
-    val sevas: StateFlow<List<Seva>> = _sevas
-
-    private val _branches = MutableStateFlow<List<Branch>>(emptyList())
-    val branches: StateFlow<List<Branch>> = _branches
-
-    private val _gurus = MutableStateFlow<List<Guru>>(emptyList())
-    val gurus: StateFlow<List<Guru>> = _gurus
-
-    private val _socialLinks = MutableStateFlow<List<SocialLink>>(emptyList())
-    val socialLinks: StateFlow<List<SocialLink>> = _socialLinks
-
-    private val _donations = MutableStateFlow<List<Donation>>(emptyList())
-    val donations: StateFlow<List<Donation>> = _donations
-
-    private val _notifications = MutableStateFlow<List<Notification>>(emptyList())
-    val notifications: StateFlow<List<Notification>> = _notifications
-
-    fun updateHomeConfig(config: HomeConfig) { _homeConfig.value = config }
-
-    fun <T> saveItem(flow: MutableStateFlow<List<T>>, item: T, getId: (T) -> Int, setId: (T, Int) -> T) {
-        val current = flow.value.toMutableList()
-        val id = getId(item)
-        val index = current.indexOfFirst { getId(it) == id }
-        if (index != -1 && id != 0) {
-            current[index] = item
-        } else {
-            val newId = (current.maxOfOrNull { getId(it) } ?: 0) + 1
-            current.add(setId(item, newId))
+    init {
+        // Enable offline persistence for faster perceived speed
+        try {
+            val settings = com.google.firebase.firestore.firestoreSettings {
+                isPersistenceEnabled = true
+                cacheSizeBytes = com.google.firebase.firestore.FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED
+            }
+            db.firestoreSettings = settings
+        } catch (e: Exception) {
+            Log.e(TAG, "Firestore settings already initialized or error: ${e.message}")
         }
-        flow.value = current
+
+        auth.addAuthStateListener {
+            _currentUser.value = it.currentUser
+        }
+        db.collection("config").document("home").addSnapshotListener { snapshot, e ->
+            if (e != null) {
+                updateStatus("config_home", "Error: ${e.message}")
+                return@addSnapshotListener
+            }
+            snapshot?.toObject(HomeConfig::class.java)?.let { 
+                _homeConfig.value = it 
+                updateStatus("config_home", "Connected")
+            }
+        }
+
+        db.collection("config").document("about").addSnapshotListener { snapshot, e ->
+            if (e != null) {
+                updateStatus("config_about", "Error: ${e.message}")
+                return@addSnapshotListener
+            }
+            snapshot?.toObject(AboutConfig::class.java)?.let {
+                _aboutConfig.value = it
+                updateStatus("config_about", "Connected")
+            }
+        }
+
+        db.collection("config").document("peethadhipati").addSnapshotListener { snapshot, e ->
+            if (e != null) return@addSnapshotListener
+            snapshot?.toObject(PeethadhipatiConfig::class.java)?.let {
+                _peethadhipatiConfig.value = it
+            }
+        }
+
+        db.collection("config").document("contact").addSnapshotListener { snapshot, e ->
+            if (e != null) return@addSnapshotListener
+            snapshot?.toObject(ContactConfig::class.java)?.let {
+                _contactConfig.value = it
+            }
+        }
+
+        db.collection("volunteer_programs").addSnapshotListener { snapshot, _ ->
+            val items = snapshot?.documents?.mapNotNull { doc ->
+                doc.toObject(ProgramConfig::class.java)?.apply { id = doc.id }
+            } ?: emptyList()
+            _volunteerPrograms.value = items
+        }
+
+        db.collection("config").document("membership").addSnapshotListener { snapshot, _ ->
+            snapshot?.toObject(ProgramConfig::class.java)?.let { _membershipConfig.value = it }
+        }
     }
 
-    fun <T> deleteItem(flow: MutableStateFlow<List<T>>, id: Int, getId: (T) -> Int) {
-        flow.value = flow.value.filter { getId(it) != id }
+    private fun updateStatus(collection: String, status: String) {
+        val current = collectionStatuses.value.toMutableMap()
+        current[collection] = status
+        collectionStatuses.value = current
     }
 
-    fun saveAnnouncement(a: Announcement) = saveItem(_announcements, a, { it.id }, { item, id -> item.copy(id = id) })
-    fun deleteAnnouncement(id: Int) = deleteItem(_announcements, id, { it.id })
+    private fun <T : Any> observeCollection(collectionName: String, clazz: Class<T>) = callbackFlow<List<T>> {
+        val listener = db.collection(collectionName).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.w(TAG, "Listen failed for $collectionName: ${error.message}")
+                updateStatus(collectionName, "Sync Issue: $collectionName")
+                trySend(emptyList())
+            } else {
+                val items = mutableListOf<T>()
+                snapshot?.documents?.forEach { doc ->
+                    try {
+                        doc.toObject(clazz)?.let { item ->
+                            try {
+                                val idField = item.javaClass.getDeclaredField("id")
+                                idField.isAccessible = true
+                                idField.set(item, doc.id)
+                            } catch (e: Exception) { /* No id field */ }
+                            items.add(item)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error deserializing document in $collectionName: ${e.message}")
+                    }
+                }
+                updateStatus(collectionName, "Connected")
+                trySend(items)
+            }
+        }
+        awaitClose { listener.remove() }
+    }
 
-    fun saveEvent(e: Event) = saveItem(_events, e, { it.id }, { item, id -> item.copy(id = id) })
-    fun deleteEvent(id: Int) = deleteItem(_events, id, { it.id })
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    fun saveSeva(s: Seva) = saveItem(_sevas, s, { it.id }, { item, id -> item.copy(id = id) })
-    fun deleteSeva(id: Int) = deleteItem(_sevas, id, { it.id })
+    private fun <T : Any> observeCollectionShared(collectionName: String, clazz: Class<T>) = 
+        observeCollection(collectionName, clazz).stateIn(
+            scope = scope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
-    fun saveShloka(s: Shloka) = saveItem(_shlokas, s, { it.id }, { item, id -> item.copy(id = id) })
-    fun deleteShloka(id: Int) = deleteItem(_shlokas, id, { it.id })
+    val announcements = observeCollectionShared("announcements", Announcement::class.java)
+    val events = observeCollection("events", Event::class.java).map { list ->
+        if (BuildConfig.FLAVOR == "admin") {
+            list
+        } else {
+            val now = System.currentTimeMillis()
+            list.filter { it.endDate == 0L || it.endDate > now }
+        }
+    }.stateIn(scope, SharingStarted.WhileSubscribed(5000), emptyList())
+    
+    val shlokas = observeCollectionShared("shlokas", Shloka::class.java)
+    val branches = observeCollectionShared("branches", Branch::class.java)
+    val socialLinks = observeCollectionShared("social_links", SocialLink::class.java)
+    val sevas = observeCollectionShared("sevas", Seva::class.java)
+    val userRegistrations = observeCollectionShared("registrations", Registration::class.java)
+    val panchanga = observeCollectionShared("panchanga", Panchang::class.java)
+    val gurus = observeCollectionShared("gurus", Guru::class.java)
+    val news = observeCollectionShared("news", News::class.java)
+    val photoAlbums = observeCollectionShared("photo_albums", PhotoAlbum::class.java)
+    val videos = observeCollectionShared("videos", VideoItem::class.java)
+    val festivals = observeCollectionShared("festivals", Festival::class.java)
+    val specialEvents = observeCollectionShared("special_events", SpecialEvent::class.java)
+    val publications = observeCollectionShared("publications", Publication::class.java)
+    val sevaRecords = if (BuildConfig.FLAVOR == "admin") observeCollectionShared("seva_records", SevaRecord::class.java) else MutableStateFlow(emptyList())
+    val appNotifications = observeCollection("notifications", AppNotification::class.java)
+        .map { it.sortedByDescending { n -> n.timestamp } }
+        .stateIn(scope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun saveBranch(b: Branch) = saveItem(_branches, b, { it.id }, { item, id -> item.copy(id = id) })
-    fun deleteBranch(id: Int) = deleteItem(_branches, id, { it.id })
+    suspend fun saveNotification(n: AppNotification): Result<Unit> = try {
+        val docRef = if (n.id.isEmpty()) db.collection("notifications").document() else db.collection("notifications").document(n.id)
+        docRef.set(n.copy(id = docRef.id)).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
 
-    fun saveSocialLink(s: SocialLink) = saveItem(_socialLinks, s, { it.id }, { item, id -> item.copy(id = id) })
-    fun deleteSocialLink(id: Int) = deleteItem(_socialLinks, id, { it.id })
+    suspend fun pushNotification(n: AppNotification): Result<Unit> = saveNotification(n)
 
-    fun sendNotification(n: Notification) = saveItem(_notifications, n, { it.id }, { item, id -> item.copy(id = id) })
+    suspend fun deleteNotification(id: String) = try {
+        db.collection("notifications").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveSevaRecord(record: SevaRecord): Result<Unit> = try {
+        db.collection("seva_records").add(record).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteSevaRecord(id: String) = try {
+        db.collection("seva_records").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun updateHomeConfig(config: HomeConfig): Result<Unit> = try {
+        db.collection("config").document("home").set(config).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun updateAboutConfig(config: AboutConfig): Result<Unit> = try {
+        db.collection("config").document("about").set(config).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun updatePeethadhipatiConfig(config: PeethadhipatiConfig): Result<Unit> = try {
+        db.collection("config").document("peethadhipati").set(config).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun updateContactConfig(config: ContactConfig): Result<Unit> = try {
+        db.collection("config").document("contact").set(config).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveVolunteerProgram(config: ProgramConfig): Result<Unit> = try {
+        val docRef = if (config.id.isEmpty()) db.collection("volunteer_programs").document() else db.collection("volunteer_programs").document(config.id)
+        docRef.set(config.copy(id = docRef.id)).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteVolunteerProgram(id: String, imageUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        db.collection("volunteer_programs").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun updateMembershipConfig(config: ProgramConfig): Result<Unit> = try {
+        db.collection("config").document("membership").set(config).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun savePublication(p: Publication): Result<Unit> = try {
+        val docRef = if (p.id.isEmpty()) db.collection("publications").document() else db.collection("publications").document(p.id)
+        docRef.set(p.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deletePublication(id: String, imageUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        db.collection("publications").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveGuru(g: Guru): Result<Unit> = try {
+        val docRef = if (g.id.isEmpty()) db.collection("gurus").document() else db.collection("gurus").document(g.id)
+        docRef.set(g.copy(id = docRef.id)).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteGuru(id: String, imageUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        db.collection("gurus").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveNews(n: News): Result<Unit> = try {
+        val docRef = if (n.id.isEmpty()) db.collection("news").document() else db.collection("news").document(n.id)
+        docRef.set(n.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteNews(id: String) = try { db.collection("news").document(id).delete().await(); Result.success(Unit) } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun savePhotoAlbum(p: PhotoAlbum): Result<Unit> = try {
+        val docRef = if (p.id.isEmpty()) db.collection("photo_albums").document() else db.collection("photo_albums").document(p.id)
+        docRef.set(p.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deletePhotoAlbum(id: String, urls: List<String> = emptyList()) = try {
+        urls.forEach { deleteImage(it) }
+        db.collection("photo_albums").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveVideo(v: VideoItem): Result<Unit> = try {
+        val docRef = if (v.id.isEmpty()) db.collection("videos").document() else db.collection("videos").document(v.id)
+        docRef.set(v.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteVideo(id: String) = try { db.collection("videos").document(id).delete().await(); Result.success(Unit) } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveFestival(f: Festival): Result<Unit> = try {
+        val docRef = if (f.id.isEmpty()) db.collection("festivals").document() else db.collection("festivals").document(f.id)
+        docRef.set(f.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteFestival(id: String) = try { db.collection("festivals").document(id).delete().await(); Result.success(Unit) } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveSpecialEvent(s: SpecialEvent): Result<Unit> = try {
+        val docRef = if (s.id.isEmpty()) db.collection("special_events").document() else db.collection("special_events").document(s.id)
+        docRef.set(s.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteSpecialEvent(id: String, imageUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        db.collection("special_events").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveAnnouncement(a: Announcement): Result<Unit> = try {
+        val docRef = if (a.id.isEmpty()) db.collection("announcements").document() else db.collection("announcements").document(a.id)
+        docRef.set(a.copy(id = docRef.id)).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteAnnouncement(id: String, imageUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        db.collection("announcements").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveEvent(e: Event): Result<Unit> = try {
+        val docRef = if (e.id.isEmpty()) db.collection("events").document() else db.collection("events").document(e.id)
+        docRef.set(e.copy(id = docRef.id)).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteEvent(id: String, imageUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        db.collection("events").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun cleanupExpiredEvents() = try {
+        val now = System.currentTimeMillis()
+        val snapshot = db.collection("events").get().await()
+        snapshot.documents.forEach { doc ->
+            val endDate = doc.getLong("endDate") ?: 0L
+            if (endDate != 0L && endDate < now) {
+                doc.reference.delete().await()
+            }
+        }
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveSeva(s: Seva): Result<Unit> = try {
+        val docRef = if (s.id.isEmpty()) db.collection("sevas").document() else db.collection("sevas").document(s.id)
+        docRef.set(s.copy(id = docRef.id)).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteSeva(id: String, imageUrl: String = "", qrUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        if (qrUrl.isNotEmpty()) deleteImage(qrUrl)
+        db.collection("sevas").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveShloka(s: Shloka) = try {
+        val docRef = if (s.id.isEmpty()) db.collection("shlokas").document() else db.collection("shlokas").document(s.id)
+        docRef.set(s.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteShloka(id: String) = try { db.collection("shlokas").document(id).delete().await(); Result.success(Unit) } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveBranch(b: Branch) = try {
+        val docRef = if (b.id.isEmpty()) db.collection("branches").document() else db.collection("branches").document(b.id)
+        docRef.set(b.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteBranch(id: String) = try { db.collection("branches").document(id).delete().await(); Result.success(Unit) } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun saveSocialLink(s: SocialLink) = try {
+        val docRef = if (s.id.isEmpty()) db.collection("social_links").document() else db.collection("social_links").document(s.id)
+        docRef.set(s.copy(id = docRef.id)).await(); Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deleteSocialLink(id: String, imageUrl: String = "") = try {
+        if (imageUrl.isNotEmpty()) deleteImage(imageUrl)
+        db.collection("social_links").document(id).delete().await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun savePanchang(p: Panchang) = try {
+        val docRef = if (p.id.isEmpty()) db.collection("panchanga").document() else db.collection("panchanga").document(p.id)
+        docRef.set(p.copy(id = docRef.id)).await()
+        cleanupOldPanchanga()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    fun calculateLocalPanchanga(timestamp: Long): Panchang {
+        val res = PanchangaEngine.calculate(timestamp)
+        return Panchang(
+            date = timestamp,
+            samvatsara = res.samvatsara,
+            ayana = res.ayana,
+            ritu = res.ritu,
+            masa = res.masa,
+            paksha = res.paksha,
+            tithi = res.tithi,
+            tithiStart = res.tithiStart,
+            tithiEnd = res.tithiEnd,
+            nextTithi = res.nextTithi,
+            nakshatra = res.nakshatra,
+            nakshatraStart = res.nakshatraStart,
+            nakshatraEnd = res.nakshatraEnd,
+            nextNakshatra = res.nextNakshatra,
+            yoga = res.yoga,
+            karana = res.karana,
+            souraMasa = res.souraMasa,
+            rahuKala = res.rahuKala,
+            yamagandaKala = res.yamaganda,
+            suryodaya = res.suryodaya,
+            suryasta = res.suryasta,
+            specialNote = res.note
+        )
+    }
+
+    suspend fun cleanupOldPanchanga() = try {
+        val fourDaysAgo = System.currentTimeMillis() - (4 * 24 * 60 * 60 * 1000L)
+        val snapshot = db.collection("panchanga").whereLessThan("date", fourDaysAgo).get().await()
+        snapshot.documents.forEach { it.reference.delete().await() }
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun deletePanchang(id: String) = try { db.collection("panchanga").document(id).delete().await(); Result.success(Unit) } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun registerForItem(itemId: String, itemTitle: String): Result<Unit> = try {
+        val docRef = db.collection("registrations").document()
+        val reg = Registration(id = docRef.id, itemId = itemId, itemTitle = itemTitle)
+        docRef.set(reg).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun registerWithForm(itemId: String, itemTitle: String, phone: String, responses: Map<String, String>, utr: String = "", amount: String = "0"): Result<Unit> = try {
+        val docRef = db.collection("registrations").document()
+        val reg = Registration(
+            id = docRef.id, 
+            itemId = itemId, 
+            itemTitle = itemTitle, 
+            phoneNumber = phone, 
+            formResponses = responses, 
+            status = "Pending Verification", 
+            utrNumber = utr,
+            paidAmount = amount
+        )
+        docRef.set(reg).await()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun updateRegistrationStatus(id: String, newStatus: String): Result<Unit> = try {
+        if (newStatus == "Verified" || newStatus == "Rejected" || newStatus == "Completed") {
+            // Delete immediately after processing as per user request to "refresh"
+            db.collection("registrations").document(id).delete().await()
+        } else {
+            db.collection("registrations").document(id).update("status", newStatus).await()
+        }
+        cleanupOldRegistrations()
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
+
+    suspend fun cleanupOldRegistrations() = try {
+        val now = System.currentTimeMillis()
+        val threeHoursAgo = now - (3 * 60 * 60 * 1000)
+        val snapshot = db.collection("registrations").get().await()
+        snapshot.documents.forEach { doc ->
+            val timestamp = doc.getLong("timestamp") ?: 0L
+            // Delete EVERYTHING older than 3 hours to refresh the logs
+            if (timestamp < threeHoursAgo) {
+                doc.reference.delete().await()
+            }
+        }
+        Result.success(Unit)
+    } catch (e: Exception) { Result.failure(e) }
 }

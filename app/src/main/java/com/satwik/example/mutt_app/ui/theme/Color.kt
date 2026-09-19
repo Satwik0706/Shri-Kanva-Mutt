@@ -9,6 +9,15 @@ val DeepSlate = Color(0xFF2D2D2D)  // Dark text
 val Sandstone = Color(0xFFE8D7C3)  // Secondary surface/card
 val GoldAccent = Color(0xFFD4AF37) // Accent for icons/logo
 
+// Premium UI Palette
+val PremiumGold = Color(0xFFCFB53B)
+val RichBrown = Color(0xFF3E2723)
+val SoftGold = Color(0xFFF1E4C3)
+val WarmWhite = Color(0xFFFFFBF5)
+val ProfessionalGreen = Color(0xFF2E7D32)
+val DeepBlack = Color(0xFF121212)
+val CardBorder = Color(0xFFE0C9A6).copy(alpha = 0.4f)
+
 // Keeping existing for compatibility where needed
 val DeepSaffron = Color(0xFFFF9933)
 val Cream = Color(0xFFFFFDD0)
