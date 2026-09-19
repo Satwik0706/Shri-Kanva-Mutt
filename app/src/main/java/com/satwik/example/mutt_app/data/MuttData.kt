@@ -302,31 +302,55 @@ object MuttRepository {
     suspend fun uploadImage(uri: Uri, folder: String): Result<String> = uploadFile(uri, folder, "jpg")
 
     suspend fun uploadCompressedImage(context: android.content.Context, uri: Uri, folder: String): Result<String> = try {
-        val inputStream = context.contentResolver.openInputStream(uri)
-        val originalBitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-        
-        // 1. Calculate scaling to keep image under 1920px while maintaining aspect ratio
         val maxDimension = 1920
-        val width = originalBitmap.width
-        val height = originalBitmap.height
-        val scale = if (width > maxDimension || height > maxDimension) {
-            val scaleW = maxDimension.toFloat() / width
-            val scaleH = maxDimension.toFloat() / height
+        
+        // 1. Efficiently decode dimensions only
+        val options = android.graphics.BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        context.contentResolver.openInputStream(uri)?.use { 
+            android.graphics.BitmapFactory.decodeStream(it, null, options)
+        }
+
+        // 2. Calculate sample size for downsampling
+        val width = options.outWidth
+        val height = options.outHeight
+        var sampleSize = 1
+        if (width > maxDimension || height > maxDimension) {
+            val halfWidth = width / 2
+            val halfHeight = height / 2
+            while (halfWidth / sampleSize >= maxDimension || halfHeight / sampleSize >= maxDimension) {
+                sampleSize *= 2
+            }
+        }
+
+        // 3. Decode scaled bitmap
+        val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+        }
+        val originalBitmap = context.contentResolver.openInputStream(uri)?.use {
+            android.graphics.BitmapFactory.decodeStream(it, null, decodeOptions)
+        } ?: throw Exception("Failed to decode bitmap")
+
+        // 4. Final precise scaling if still needed
+        val finalScale = if (originalBitmap.width > maxDimension || originalBitmap.height > maxDimension) {
+            val scaleW = maxDimension.toFloat() / originalBitmap.width
+            val scaleH = maxDimension.toFloat() / originalBitmap.height
             kotlin.math.min(scaleW, scaleH)
         } else 1.0f
         
-        val bitmap = if (scale < 1.0f) {
+        val bitmap = if (finalScale < 1.0f) {
             android.graphics.Bitmap.createScaledBitmap(
                 originalBitmap, 
-                (width * scale).toInt(), 
-                (height * scale).toInt(), 
+                (originalBitmap.width * finalScale).toInt(), 
+                (originalBitmap.height * finalScale).toInt(), 
                 true
             )
         } else originalBitmap
 
         val baos = java.io.ByteArrayOutputStream()
         
-        // 2. Use WebP for superior compression (API 30+) with fallback for older versions
+        // 5. Use WebP for superior compression
         val format = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
         } else {

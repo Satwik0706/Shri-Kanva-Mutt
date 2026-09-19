@@ -31,8 +31,7 @@ fun MUTT_APPTheme(
     val view = LocalView.current
     if (!view.isInEditMode) {
         val window = (view.context as Activity).window
-        window.statusBarColor = colorScheme.primary.toArgb()
-        // Always use dark icons on light status bar for consistency
+        // Use light icons (isAppearanceLightStatusBars = false) on dark Terracotta background
         WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
     }
 

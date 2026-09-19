@@ -181,10 +181,20 @@ object TranslationManager {
         "Revati" to "ರೇವತಿ"
     )
 
+    private fun isAlreadyKannada(text: String): Boolean {
+        return text.any { it in '\u0C80'..'\u0CFF' }
+    }
+
     suspend fun translate(text: String): String {
         if (text.isBlank()) return text
         
         val trimmedText = text.trim()
+        
+        // Skip translation if the text already contains Kannada characters to avoid double translation
+        if (isAlreadyKannada(trimmedText)) {
+            return trimmedText
+        }
+        
         Log.d(TAG, "Translating: '$trimmedText'")
         
         // 1. Check local manual map first for high quality
