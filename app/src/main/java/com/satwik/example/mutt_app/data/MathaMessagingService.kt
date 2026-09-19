@@ -16,11 +16,8 @@ import com.satwik.example.mutt_app.R
 class MathaMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        Log.d(TAG, "From: ${remoteMessage.from}")
-
         // Check if message contains a notification payload.
         remoteMessage.notification?.let {
-            Log.d(TAG, "Message Notification Body: ${it.body}")
             sendNotification(it.title ?: "Matha Update", it.body ?: "")
         }
 
@@ -33,8 +30,7 @@ class MathaMessagingService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        Log.d(TAG, "Refreshed token: $token")
-        // Normally you'd send this to your server or save to Firestore
+        // Token refreshed
     }
 
     private fun sendNotification(title: String, messageBody: String) {
@@ -54,7 +50,6 @@ class MathaMessagingService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setFullScreenIntent(pendingIntent, true) // Makes it pop up!
             .setContentIntent(pendingIntent)
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -78,6 +73,5 @@ class MathaMessagingService : FirebaseMessagingService() {
     }
 
     companion object {
-        private const val TAG = "MathaMessagingService"
     }
 }
